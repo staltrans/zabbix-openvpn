@@ -1,0 +1,153 @@
+#!/bin/sh
+
+log() {
+ echo "`date +"[%d/%b/%Y:%H:%M:%S %z]"` ${@}"
+}
+
+ovpn=`which openvpn`
+cli_key="u"
+inst_key="i"
+sent_key="s"
+recv_key="r"
+cnt_key="c"
+
+if [ ! -x "$ovpn" ]; then
+    log "Проверьте установлен ли openvpn и переменную \$PATH=$PATH"
+    exit 1
+fi
+
+help() {
+cat << EOF
+ $0 [-$cli_key] [-$cnt_key]
+ $0 [-$cli_key <client name>] [-$sent_key|-$recv_key]
+ $0 [-$inst_key]
+ $0 [-$inst_key <instance name>]
+   -$inst_key выводит сисок инсталляций openvpn, если после -$inst_key указано имя инсталляции,
+      то выводит статус процесса.
+   -$cli_key выводит список пользователей всех инсталляций, если после -$cli_key указано имя
+      клиента то выводит статус клиента
+   -$sent_key|-$recv_key в сочетании с ключом -$cli_key выведут соответственно, количество принятых,
+      отправленных байт клиенту
+   -$cnt_key в сочетании с ключом -$cli_key выведет количество подключённых клиентов
+   -h|-? показ данной справки
+EOF
+}
+
+# Process list
+plist() {
+    ps aux | grep "[/]${ovpn#/*}"
+}
+
+# Instances list
+ilist() {
+    plist | sed -n -e 's/.*--daemon[[:space:]]\([^ ]\+\)[[:space:]].*/\1/p'
+}
+
+# Configs list
+cnf_list() {
+    plist | sed -n -e 's/.*--config[[:space:]]\([^ ]\+\)[[:space:]].*/\1/p'
+}
+
+# Client list
+clist() {
+    for cnf in `cnf_list`; do
+        ccd=`sed -n -e 's/[[:space:]]*client-config-dir[[:space:]]*\(.\+\)[[:space:]]*/\1/p' $cnf`
+        workdir=`dirname ${cnf}`
+        ccd="$workdir/${ccd##$workdir/}"
+        if [ -d "$ccd" ]; then
+            ls -F -1 $ccd
+        fi
+    done
+}
+
+if [ -z "$*" ]; then
+    help
+    exit 1
+fi
+
+while getopts ":${inst_key}:${cli_key}:${sent_key}${recv_key}${cnt_key}h?" OPTION
+do
+    case $OPTION in
+        $inst_key)
+            instance=$OPTION
+            instance_arg=$OPTARG
+            ;;
+        $cli_key)
+            client=$OPTION
+            client_arg=$OPTARG
+            ;;
+        $sent_key)
+            sent=$OPTION
+            ;;
+        $recv_key)
+            received=$OPTION
+            ;;
+        $cnt_key)
+            count=$OPTION
+            ;;
+        :)
+            opt=$OPTION
+            opt_arg=$OPTARG
+            ;;
+        h|?)
+            help
+            ;;
+    esac
+done
+
+if [ "$instance" = "$inst_key" -a "$instance_arg" != "-$cli_key" ]; then
+    plist | awk "/$instance_arg/ {print substr(\$8,1,1)}"
+    # Return process state codes:
+    #    D uninterruptible sleep (usually IO)
+    #    R running or runnable (on run queue)
+    #    S interruptible sleep (waiting for an event to complete)
+    #    T stopped by job control signal
+    #    t stopped by debugger during the tracing
+    #    W paging (not valid since the 2.6.xx kernel)
+    #    X dead (should never be seen)
+    #    Z defunct ("zombie") process, terminated but not reaped by its parent
+    exit
+fi
+
+if [ "$client" = "$cli_key" -a "$client_arg" != "-$inst_key" ]; then
+    cnt=0
+    for status in `cnf_list`; do
+        status=`sed -n -e 's/[[:space:]]*status[[:space:]]*\(.\+\)[[:space:]]*/\1/p' $status`
+        workdir=`dirname ${status}`
+        status="$workdir/${status##$workdir/}"
+        if [ -r "$status" ]; then
+            if [ "$client" = "$cli_key" -a "$client_arg" = "-$cnt_key" ]; then
+                cnt=$(($cnt + `grep -c "^.\+,[0-9.:]\+,[0-9]\+,[0-9]\+,.\+" $status`))
+            else
+                if [ "$received" = "$recv_key" ]; then
+                    awk -F "," "/^$client_arg/ {print \$3}" $status
+                fi
+                if [ "$sent" = "$sent_key" ]; then
+                    awk -F "," "/^$client_arg/ {print \$4}" $status
+                fi
+                if [ -z "$sent$received" ]; then
+                    awk -F "," "/^$client_arg/ {split(\$2,addr,\":\"); print addr[1]}" $status
+                fi
+            fi
+        fi
+    done
+    if [ $cnt -ne 0 ]; then
+        echo $cnt
+    fi
+    exit
+fi
+
+if [ "$opt" = ":" -a ! -z "$opt_arg" ]; then
+    case $opt_arg in
+        $inst_key)
+            ilist | \
+            awk -v ORS="" 'BEGIN { print "{\"data\":["} { gsub(/@/, "", $1) ; print "{\"{#OPENVPN_INSTANCE}\":\""$1"\"}," } END { print "]}" }' | \
+            sed 's/,]}$/]}\n/'
+            ;;
+        $cli_key)
+            clist | \
+            awk -v ORS="" 'BEGIN { print "{\"data\":["} { gsub(/@/, "", $1) ; print "{\"{#OPENVPN_CLIENT}\":\""$1"\"}," } END { print "]}" }' | \
+            sed 's/,]}$/]}\n/'
+            ;;
+    esac
+fi

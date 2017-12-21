@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <zabbix_export>
     <version>3.4</version>
-    <date>2017-12-21T09:30:59Z</date>
+    <date>2017-12-21T09:44:10Z</date>
     <groups>
         <group>
             <name>Templates</name>
@@ -29,7 +29,7 @@
                     <snmp_community/>
                     <snmp_oid/>
                     <key>openvpn.users_numbers</key>
-                    <delay>600s</delay>
+                    <delay>3m</delay>
                     <history>90d</history>
                     <trends>365d</trends>
                     <status>0</status>

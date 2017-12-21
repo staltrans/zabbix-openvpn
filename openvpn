@@ -120,13 +120,13 @@ if [ "$client" = "$cli_key" -a "$client_arg" != "-$inst_key" ]; then
                 cnt=$(($cnt + `grep -c "^.\+,[0-9.:]\+,[0-9]\+,[0-9]\+,.\+" $status`))
             else
                 if [ "$received" = "$recv_key" ]; then
-                    awk -F "," "/^$client_arg/ {print \$3}" $status
+                    awk -F "," "/^$client_arg,/ {print \$3}" $status
                 fi
                 if [ "$sent" = "$sent_key" ]; then
-                    awk -F "," "/^$client_arg/ {print \$4}" $status
+                    awk -F "," "/^$client_arg,/ {print \$4}" $status
                 fi
                 if [ -z "$sent$received" ]; then
-                    awk -F "," "/^$client_arg/ {split(\$2,addr,\":\"); print addr[1]}" $status
+                    awk -F "," "/^$client_arg,/ {split(\$2,addr,\":\"); print addr[1]}" $status
                 fi
             fi
         fi

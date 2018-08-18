@@ -1,5 +1,4 @@
-# zabbix-openvpn
-Zabbix 3.4
+# Шаблон мониторинга OpenVPN для Zabbix 3.4
 
 Скрипт мониторинга пользователей OpenVPN.
 
@@ -9,11 +8,8 @@ Zabbix 3.4
 
 Установка:
 
- * скопировать файл `openvpn` в любую директорию, на сервере с OpenVPN (по умолчанию, `/etc/zabbix/scripts/`).
+ * скопировать директории `scripts`, zabbix_agentd.d в `/etc/zabbix/` на сервере с OpenVPN.
 	
- * файл `userparameter_openvpn.conf` скопировать в директорию `/etc/zabbix/zabbix_agentd.d/` или скопировать содержимое
-   в конец файла `/etc/zabbix/zabbix_agentd.conf` и проверить пути до скрипта `openvpn`
-	
- * импортировать в zabbix шаблон openvpn.xml
+ * импортировать в zabbix шаблон `Template App Openvpn.xml`
 
- * скопировать файл `sudoers-zabbix` в директорию `/etc/sudoers.d/`
+ * скопировать файл `sudoers.d/zabbix` в директорию `/etc/sudoers.d/`. Если файл `/etc/sudoers.d/zabbix` существует, то дописать в конец: `cat sudoers.d/zabbix >> /etc/sudoers.d/zabbix`

@@ -5,10 +5,10 @@ log() {
 }
 
 ovpn=`which openvpn`
+geoip=`which geoiplookup`
+
 cli_key="u"
 inst_key="i"
-sent_key="s"
-recv_key="r"
 cnt_key="c"
 
 if [ ! -x "$ovpn" ]; then
@@ -19,15 +19,12 @@ fi
 help() {
 cat << EOF
  $0 [-$cli_key] [-$cnt_key]
- $0 [-$cli_key <client name>] [-$sent_key|-$recv_key]
  $0 [-$inst_key]
  $0 [-$inst_key <instance name>]
    -$inst_key выводит сисок инсталляций openvpn, если после -$inst_key указано имя инсталляции,
       то выводит статус процесса.
    -$cli_key выводит список пользователей всех инсталляций, если после -$cli_key указано имя
       клиента то выводит статус клиента
-   -$sent_key|-$recv_key в сочетании с ключом -$cli_key выведут соответственно, количество принятых,
-      отправленных байт клиенту
    -$cnt_key в сочетании с ключом -$cli_key выведет количество подключённых клиентов
    -h|-? показ данной справки
 EOF
@@ -119,21 +116,39 @@ if [ "$client" = "$cli_key" -a "$client_arg" != "-$inst_key" ]; then
             if [ "$client" = "$cli_key" -a "$client_arg" = "-$cnt_key" ]; then
                 cnt=$(($cnt + `grep -c "^.\+,[0-9.:]\+,[0-9]\+,[0-9]\+,.\+" $status`))
             else
-                if [ "$received" = "$recv_key" ]; then
-                    awk -F "," "/^$client_arg,/ {print \$3}" $status
+                json=$(grep -E "^$client_arg," $status | awk -v ORS="" \
+                    -F "," \
+                    'BEGIN {}  
+                        {
+                            split($2,addr,":");
+                            print("\"name\":\""$1"\",\"real_addr\":\""addr[1]"\",\"received\":\""$3"\",\"sent\":\""$4"\",\"start\":\""$5"\",") 
+                        }
+                    END {}')
+                real_addr=$(awk -F "," "/^$client_arg,/ {split(\$2,addr,\":\"); print addr[1]}" $status)
+                if [ -x "$geoip" -a ! -z "$real_addr" ]; then
+                    json=$json$($geoip $real_addr | awk -F ": " -v ORS="" \
+                        'BEGIN {}
+                            {
+                                split($1,key," ");
+                                print("\""tolower(key[2])"\""":""\""$2"\",")
+                            }
+                        END {}')
                 fi
-                if [ "$sent" = "$sent_key" ]; then
-                    awk -F "," "/^$client_arg,/ {print \$4}" $status
-                fi
-                if [ -z "$sent$received" ]; then
-                    awk -F "," "/^$client_arg,/ {split(\$2,addr,\":\"); print addr[1]}" $status
-                fi
+                [ ! -z "$json" ] && break
             fi
         fi
     done
-    if [ $cnt -ne 0 ]; then
-        echo $cnt
+
+    if [ -z "$json" ]; then
+        if [ $cnt -ne 0 ]; then
+            echo $cnt
+        else
+            echo '{"name":"","real_addr":"","received":"0","sent":"0","start":"","country":"","city":"","asnum":""}'
+        fi
+    else
+        echo "{$json}" | sed 's/,}$/}/'
     fi
+
     exit
 fi
 
